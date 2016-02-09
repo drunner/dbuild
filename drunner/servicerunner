@@ -60,10 +60,10 @@ function dockerrun {
 
 function isdev {
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-   [ "$BRANCH" = "dev" ]
+   [ "$BRANCH" = "dev" ] && [ -e "$1/imagename" ]
 }
 
-function branch_low {
+function info_low {
    local P="$1"
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null) || { saybad "$P - not a git repo" ; return 1 ; }
    [ "$BRANCH" = "dev" ] && { saygood "$P - dev" ; return 0 ; }
@@ -176,8 +176,8 @@ function main {
             runcmd copyup_low
             ;;
             
-         info|branch)
-            runcmd branch_low
+         info)
+            runcmd info_low
             ;;
             
          push)
