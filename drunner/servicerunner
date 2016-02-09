@@ -34,8 +34,8 @@ NAME
 SYNOPSIS
    ${SERVICENAME} [-a] build
    ${SERVICENAME} [-a] copyup
-   ${SERVICENAME} [-a] branch
-   ${SERVICENAME} [-a] push 
+   ${SERVICENAME} [-a] info|branch
+   ${SERVICENAME} [-a] push [COMMITMSG]
    
    ${SERVICENAME} configure     
    
@@ -46,55 +46,69 @@ EOF
 }
 
 #------------------------------------------------------------------------------------
-# Run a command in the container. If we had any volumes we'd add in "${DOCKEROPTS[@]}".
 
 function sayinfo { echo -e "[ \e[2m${1}\e[0m ]" ; }
 function saygood { echo -e "[ \e[32m${1}\e[0m ]" ; }
 function saybad { echo -e "[ \e[31m\e[1m${1}\e[0m ]" ; }
 
 function dockerrun {
-   docker run -i --name="${SERVICENAME}-${COMMAND}" -h "${HOSTNAME}" "${IMAGENAME}" "$@"
+   docker run -i --name="${SERVICENAME}-${COMMAND}" -h "${HOSTNAME}" "${DOCKEROPTS[@]}" "${IMAGENAME}" "$@"
    local RVAL=$?
    docker rm "${SERVICENAME}-${COMMAND}" >/dev/null
    if [ $RVAL -ne 0 ]; then die "${SERVICENAME} ${COMMAND} failed." ; fi
 }
 
-function branch_low {
-   local P="$1"
-   local BRANCH=$(git rev-parse --abbrev-ref HEAD) || { saybad "$P - not a git repo" ; return 1 ; }
-   [ "$BRANCH" = "dev" ] && { saygood "$P - dev" ; return 0 ; }
-   [ "$BRANCH" = "master" ] && { sayinfo "$P - master" ; return 0 ; }
-   saybad "$P - $BRANCH"   
+function isdev {
+   local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+   [ "$BRANCH" = "dev" ]
 }
 
-function branch {
-   [ -v DEVPATH ] || { branch_low "$PWD" ; return 0 ; }
-   
+function branch_low {
+   local P="$1"
+   local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null) || { saybad "$P - not a git repo" ; return 1 ; }
+   [ "$BRANCH" = "dev" ] && { saygood "$P - dev" ; return 0 ; }
+   [ "$BRANCH" = "master" ] && { sayinfo "$P - master" ; return 0 ; }
+   [ -n "$BRANCH" ] || { sayinfo "$P - No repo" ; return 1 ; }
+   sayinfo "$P - $BRANCH"   
+}
+
+function push_low {
+   local P="$1"
+   isdev "$P" || { saybad "For safety we only push to dev branch." ; return 1 ; }
    (
-   cd "$DEVPATH"
-   for d in */ ; do
-      branch_low "$d"
-   done
+      cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
+      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      saygood "Committed $P to branch $BRANCH."
+   )
+}
+
+function build_low {
+   local P="$1"
+   [ -e "$P/imagename" ] || { saybad "$P - missing imagename" ; return 1 ; }
+   local IMAGENAME=$(<"$P/imagename")
+   [ -n "IMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   (
+      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      [ "$BRANCH" = "master" ] || IMAGENAME="${IMAGENAME}:${BRANCH}"
+      cd "$P" ; docker build -t "${IMAGENAME}" . && saygood "Built ${IMAGENAME}"
+   )
+}
+
+function copyup_low {
+   local P="$1"
+   isdev "$P" || { saybad "For safety we only copy up when already in dev branch." ; return 1 ; }
+   (
+      cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
    )
 }
 
 
-
-# function pushy {
-#   ( #subshell
-#   cd "/root/dev/$1"
-#   BRANCH=$(git rev-parse --abbrev-ref HEAD) || BRANCH="wibble"
-#   [ "$BRANCH" = "dev" ] || { sayinfo "On $BRANCH not dev: $d" ; exit 0 ; }
-#   [ -e "push" ] || { sayinfo "Doesn't have push script: $D" ; exit 0 ; }
-#   ./push || { saybad "FAILED for $1" ; exit 1 ; }
-#   saygood "Pushed $d to $BRANCH"
-#   )
-# }
-
-# for d in */ ; do
-#     pushy "$d"
-# done
-
+function runcmd {
+   [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
+   (
+   cd "$DEVPATH" ; for d in */ ; do "$1" "$d" ; done
+   )   
+}
 
 #------------------------------------------------------------------------------------
 # The main function. We can add any commands we'd like here!
@@ -154,21 +168,29 @@ function main {
          #--- custom commands
 
          build)
-            build
+            runcmd build_low
             ;;
             
          copyup)
-            copyup
+            runcmd copyup_low
             ;;
             
-         branch)
-            branch
+         info|branch)
+            runcmd branch_low
             ;;
             
          push)
-            push
+            COMMITMSG="auto commit by j842/build"
+            [ $# -eq 0 ] || COMMITMSG="$1"
+            runcmd push_low
             ;;
             
+         configure)
+            dockerrun bash -c "echo $PWD > /config/path"
+            DEVPATH=$(dockerrun cat /config/path) || die "Configure failed."
+            echo "Path set to $DEVPATH"
+            ;;
+                        
          #--- unrecognised commands
 
          *)
