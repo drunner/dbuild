@@ -35,6 +35,8 @@ SYNOPSIS
    ${SERVICENAME} [-a] build
    ${SERVICENAME} [-a] copyup
    ${SERVICENAME} [-a] info
+   ${SERVICENAME} [-a] check
+   ${SERVICENAME} [-a] test
    ${SERVICENAME} [-a] push [COMMITMSG]
    
    ${SERVICENAME} configure     
@@ -57,6 +59,17 @@ function dockerrun {
    docker rm "${SERVICENAME}-${COMMAND}" >/dev/null
    if [ $RVAL -ne 0 ]; then die "${SERVICENAME} ${COMMAND} failed." ; fi
 }
+
+function setBRANCHEDIMAGENAME {
+   local P="$1"
+   [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   BRANCHEDIMAGENAME=$(<"$P/imagename")
+   [ -n "IMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+   [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BRANCHEDIMAGENAME}:${BRANCH}"
+}
+
 
 function isdev {
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -92,13 +105,9 @@ function push_low {
 
 function build_low {
    local P="$1"
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
-   local IMAGENAME=$(<"$P/imagename")
-   [ -n "IMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   setBRANCHEDIMAGENAME "$P"
    (
-      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-      [ "$BRANCH" = "master" ] || IMAGENAME="${IMAGENAME}:${BRANCH}"
-      cd "$P" ; docker build -t "${IMAGENAME}" . && saygood "Built ${IMAGENAME}"
+      cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
    )
 }
 
@@ -111,6 +120,15 @@ function copyup_low {
    )
 }
 
+function check_low {
+   setBRANCHEDIMAGENAME "$1"
+   drunner checkimage "$BRANCHEDIMAGENAME"
+}
+
+function test_low {
+   setBRANCHEDIMAGENAME "$1"
+   dtest test "$BRANCHEDIMAGENAME"
+}
 
 function runcmd {
    [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
@@ -187,6 +205,14 @@ function main {
          info)
             runcmd info_low
             ;;
+            
+         check)
+            runcmd check_low
+            ;;
+            
+         test)
+            runcmd test_low
+            ;;   
             
          push)
             COMMITMSG="auto commit by j842/build"
