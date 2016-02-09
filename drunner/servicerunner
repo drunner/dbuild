@@ -107,7 +107,7 @@ function push_low {
 
 function build_low {
    local P="$1"
-   setBRANCHEDIMAGENAME "$P"
+   setBRANCHEDIMAGENAME "$P" || return 1
    (
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
    )
