@@ -62,8 +62,8 @@ function dockerrun {
 function branch_low {
    local P="$1"
    local BRANCH=$(git rev-parse --abbrev-ref HEAD) || { saybad "$P - not a git repo" ; return 1 ; }
-   [ "$BRANCH" -eq "dev" ] && saygood "$P - dev" ; return 0 ; }
-   [ "$BRANCH" -eq "master" ] && sayinfo "$P - master" ; return 0 ; }
+   [ "$BRANCH" = "dev" ] && { saygood "$P - dev" ; return 0 ; }
+   [ "$BRANCH" = "master" ] && { sayinfo "$P - master" ; return 0 ; }
    saybad "$P - $BRANCH"   
 }
 
@@ -72,7 +72,7 @@ function branch {
    
    (
    cd "$DEVPATH"
-   for d in "*/" ; do
+   for d in */ ; do
       branch_low "$d"
    done
    )
