@@ -34,7 +34,7 @@ NAME
 SYNOPSIS
    ${SERVICENAME} [-a] build
    ${SERVICENAME} [-a] copyup
-   ${SERVICENAME} [-a] info|branch
+   ${SERVICENAME} [-a] info
    ${SERVICENAME} [-a] push [COMMITMSG]
    
    ${SERVICENAME} configure     
@@ -60,21 +60,28 @@ function dockerrun {
 
 function isdev {
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-   [ "$BRANCH" = "dev" ] && [ -e "$1/imagename" ]
+   [ "$BRANCH" = "dev" ]
+}
+
+function hasimagename {
+   [ -e "$1/imagename" ]
 }
 
 function info_low {
    local P="$1"
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null) || { saybad "$P - not a git repo" ; return 1 ; }
-   [ "$BRANCH" = "dev" ] && { saygood "$P - dev" ; return 0 ; }
-   [ "$BRANCH" = "master" ] && { sayinfo "$P - master" ; return 0 ; }
-   [ -n "$BRANCH" ] || { sayinfo "$P - No repo" ; return 1 ; }
-   sayinfo "$P - $BRANCH"   
+   hasimagename "$P" ||         { sayinfo "$P - missing imagename" ; return 1 ; }
+   isdev "$P" &&                { saygood "$P - dev" ; return 0 ; }
+   [ "$BRANCH" = "master" ] &&  { sayinfo "$P - master" ; return 0 ; }
+   [ -n "$BRANCH" ] &&          { sayinfo "$P - $BRANCH" ; return 0 ; }       
+   sayinfo "$P - No repo"
+   return 1 
 }
 
 function push_low {
    local P="$1"
-   isdev "$P" || { saybad "For safety we only push to dev branch." ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
       local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -85,7 +92,7 @@ function push_low {
 
 function build_low {
    local P="$1"
-   [ -e "$P/imagename" ] || { saybad "$P - missing imagename" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
    local IMAGENAME=$(<"$P/imagename")
    [ -n "IMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
    (
@@ -97,7 +104,8 @@ function build_low {
 
 function copyup_low {
    local P="$1"
-   isdev "$P" || { saybad "For safety we only copy up when already in dev branch." ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
    )
@@ -107,7 +115,7 @@ function copyup_low {
 function runcmd {
    [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
    (
-   cd "$DEVPATH" ; for d in */ ; do "$1" "$d" ; done
+   cd "$DEVPATH" ; for d in */ ; do "$1" "${d%/}" ; done
    )   
 }
 
