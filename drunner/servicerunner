@@ -47,9 +47,9 @@ EOF
 
 #------------------------------------------------------------------------------------
 
-function sayinfo { echo -e "[ \e[2m${1}\e[0m ]" ; }
-function saygood { echo -e "[ \e[32m${1}\e[0m ]" ; }
-function saybad { echo -e "[ \e[31m\e[1m${1}\e[0m ]" ; }
+function sayinfo { echo -e "] \e[2m${1}\e[0m" ; }
+function saygood { echo -e "] \e[32m${1}\e[0m" ; }
+function saybad { echo -e "] \e[31m\e[1m${1}\e[0m" ; }
 
 function dockerrun {
    docker run -i --name="${SERVICENAME}-${COMMAND}" -h "${HOSTNAME}" "${DOCKEROPTS[@]}" "${IMAGENAME}" "$@"
