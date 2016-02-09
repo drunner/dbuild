@@ -64,10 +64,12 @@ function setBRANCHEDIMAGENAME {
    local P="$1"
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
    hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
-   BRANCHEDIMAGENAME=$(<"$P/imagename")
+   BASEIMAGENAME=$(<"$P/imagename")
    [ -n "IMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
    local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-   [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BRANCHEDIMAGENAME}:${BRANCH}"
+
+   BRANCHEDIMAGENAME="$BASEIMAGENAME"
+   [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
 }
 
 
@@ -121,19 +123,23 @@ function copyup_low {
 }
 
 function check_low {
-   setBRANCHEDIMAGENAME "$1"
+   setBRANCHEDIMAGENAME "$1" || return 1
+   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
    drunner checkimage "$BRANCHEDIMAGENAME"
 }
 
 function test_low {
-   setBRANCHEDIMAGENAME "$1"
+   setBRANCHEDIMAGENAME "$1" || return 1
+   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
    dtest test "$BRANCHEDIMAGENAME"
 }
 
 function runcmd {
    [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
    (
-   cd "$DEVPATH" ; for d in */ ; do "$1" "${DEVPATH}/${d%/}" ; done
+   cd "$DEVPATH" ; for d in */ ; do 
+      "$1" "${DEVPATH}/${d%/}"
+   done
    )   
 }
 
