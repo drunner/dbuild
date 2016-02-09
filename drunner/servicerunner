@@ -79,7 +79,7 @@ function push_low {
       cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
       local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
       saygood "Pushed $P -> $BRANCH"
-      sayifo  "Commit message: $COMMITMSG"
+      sayinfo  "Commit message: $COMMITMSG"
    )
 }
 
