@@ -64,6 +64,13 @@ function hasimagename {
    [ -e "$1/imagename" ]
 }
 
+function isrepo {
+   (
+      cd $1
+      git rev-parse --abbrev-ref HEAD  >/dev/null
+   )
+}
+
 function setBRANCHEDIMAGENAME {
    local P="${1:-""}"
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
@@ -99,12 +106,7 @@ function info_low {
 
 #---------------------------------------------------------------------------------
 
-function isrepo {
-   (
-      cd $1
-      git rev-parse --abbrev-ref HEAD  
-   )
-}
+
 
 function push_low {
    local P="$1"
