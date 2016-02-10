@@ -69,11 +69,14 @@ function setBRANCHEDIMAGENAME {
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
    [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 1 ; }
    BASEIMAGENAME=$(<"$P/imagename")
-   [ -n "BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
-   local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-
    BRANCHEDIMAGENAME="$BASEIMAGENAME"
-   [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
+
+   [ -n "BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   
+   if isrepo "$P" ; then
+      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
+   fi
 }
 
 
@@ -94,8 +97,18 @@ function info_low {
    return 1 
 }
 
+#---------------------------------------------------------------------------------
+
+function isrepo {
+   (
+      cd $1
+      git rev-parse --abbrev-ref HEAD  
+   )
+}
+
 function push_low {
    local P="$1"
+   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
    hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
    isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
@@ -106,20 +119,25 @@ function push_low {
    )
 }
 
+
+function copyup_low {
+   local P="$1"
+   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
+   (
+      cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
+   )
+}
+
+#---------------------------------------------------------------------------------
+
+
 function build_low {
    local P="$1"
    setBRANCHEDIMAGENAME "$P" || return 1
    (
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
-   )
-}
-
-function copyup_low {
-   local P="$1"
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
-   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
-   (
-      cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
    )
 }
 
