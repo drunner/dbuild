@@ -135,11 +135,19 @@ function test_low {
    dtest test "$BRANCHEDIMAGENAME"
 }
 
+function title {
+   echo " ">&2
+   echo " ">&2
+   echo -e "\e[1;4;32m${1}\e[0m">&2
+   echo " ">&2
+}
+
 function runcmd {
    [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
    (
    cd "$DEVPATH"
    for d in */ ; do 
+      title "Processing ${d%/}"
       "$1" "${DEVPATH}/${d%/}"
    done
    )   
