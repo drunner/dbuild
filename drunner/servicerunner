@@ -112,7 +112,7 @@ function info_low {
 function push_low {
    local P="$1"
    isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
    isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
@@ -126,7 +126,7 @@ function push_low {
 function copyup_low {
    local P="$1"
    isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
    isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
