@@ -139,7 +139,7 @@ function copyup_low {
 function build_low {
    local P="$1"
    setBRANCHEDIMAGENAME "$P" || return 1
-  # [ -n "$BASEIMAGENAME" ] || return 0
+   [ -n "$BASEIMAGENAME" ] || return 0
    (
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
    )
