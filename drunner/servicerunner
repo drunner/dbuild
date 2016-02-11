@@ -66,15 +66,16 @@ function hasimagename {
 
 function isrepo {
    (
-      cd $1
+      cd "$1"
       git rev-parse --abbrev-ref HEAD  >/dev/null
    )
 }
 
 function setBRANCHEDIMAGENAME {
+   BASEIMAGENAME=""
    local P="${1:-""}"
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
-   [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 1 ; }
+   [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 0 ; }
    BASEIMAGENAME=$(<"$P/imagename")
    BRANCHEDIMAGENAME="$BASEIMAGENAME"
 
@@ -138,6 +139,7 @@ function copyup_low {
 function build_low {
    local P="$1"
    setBRANCHEDIMAGENAME "$P" || return 1
+  # [ -n "$BASEIMAGENAME" ] || return 0
    (
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
    )
@@ -145,13 +147,15 @@ function build_low {
 
 function check_low {
    setBRANCHEDIMAGENAME "$1" || return 1
+   [ -n "$BASEIMAGENAME" ] || return 0
    [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
    drunner checkimage "$BRANCHEDIMAGENAME"
 }
 
 function test_low {
    setBRANCHEDIMAGENAME "$1" || return 1
-   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
+   [ -n "$BASEIMAGENAME" ] || return 0
+   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 0 ; }
    dtest test "$BRANCHEDIMAGENAME"
 }
 
