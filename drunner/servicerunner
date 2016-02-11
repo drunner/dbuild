@@ -64,16 +64,27 @@ function hasimagename {
    [ -e "$1/imagename" ]
 }
 
+function isrepo {
+   (
+      cd "$1"
+      git rev-parse --abbrev-ref HEAD  >/dev/null
+   )
+}
+
 function setBRANCHEDIMAGENAME {
+   BASEIMAGENAME=""
    local P="${1:-""}"
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
-   [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 1 ; }
+   [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 0 ; }
    BASEIMAGENAME=$(<"$P/imagename")
-   [ -n "BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
-   local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-
    BRANCHEDIMAGENAME="$BASEIMAGENAME"
-   [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
+
+   [ -n "BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   
+   if isrepo "$P" ; then
+      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
+   fi
 }
 
 
@@ -94,9 +105,14 @@ function info_low {
    return 1 
 }
 
+#---------------------------------------------------------------------------------
+
+
+
 function push_low {
    local P="$1"
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
    isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
@@ -106,32 +122,40 @@ function push_low {
    )
 }
 
-function build_low {
-   local P="$1"
-   setBRANCHEDIMAGENAME "$P" || return 1
-   (
-      cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
-   )
-}
 
 function copyup_low {
    local P="$1"
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 1 ; }
+   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
+   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
    isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
    (
       cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
    )
 }
 
+#---------------------------------------------------------------------------------
+
+
+function build_low {
+   local P="$1"
+   setBRANCHEDIMAGENAME "$P" || return 1
+   [ -n "$BASEIMAGENAME" ] || return 0
+   (
+      cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
+   )
+}
+
 function check_low {
    setBRANCHEDIMAGENAME "$1" || return 1
+   [ -n "$BASEIMAGENAME" ] || return 0
    [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
    drunner checkimage "$BRANCHEDIMAGENAME"
 }
 
 function test_low {
    setBRANCHEDIMAGENAME "$1" || return 1
-   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
+   [ -n "$BASEIMAGENAME" ] || return 0
+   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 0 ; }
    dtest test "$BRANCHEDIMAGENAME"
 }
 
