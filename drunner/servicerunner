@@ -115,19 +115,22 @@ function build_low {
       [ -e "$P/Dockerfile" ] || { saybad "No Dockerfile, can't build." ; return 1 ; }
       echo "Building ${BRANCHEDIMAGENAME}..."
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
+      
       if isrepo "$P" && isdev "$P" ; then
          local SERVICENAME="${BASEIMAGENAME##*/}"
          SERVICENAME="${SERVICENAME%%:*}"
          
          if [ "$SERVICENAME" = "install-support" ]; then
-            drunner update 
+            echo " "
+            drunner update && saygood "Drunner updated with install-support:dev just built."
          else
+            echo " "
             drunner status "$SERVICENAME" >/dev/null 2>&1
             if [ $? -ne 0 ]; then
                drunner install "$BRANCHEDIMAGENAME" "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
                drunner status "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
             fi
-            drunner recover "$SERVICENAME" "$BRANCHEDIMAGENAME"
+            drunner recover "$SERVICENAME" "$BRANCHEDIMAGENAME" && saygood "drunner updated with $BRANCHEDIMAGENAME as service $SERVICENAME"
          fi
       fi
    )
@@ -137,7 +140,7 @@ function check_low {
    setBRANCHEDIMAGENAME "$1" || return 1
    [ -n "$BASEIMAGENAME" ] || return 0
    [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
-   drunner checkimage "$BRANCHEDIMAGENAME"
+   drunner checkimage "$BRANCHEDIMAGENAME" && saygood "$BRANCHEDIMAGENAME is valid."
 }
 
 function test_low {
