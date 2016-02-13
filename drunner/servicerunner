@@ -122,7 +122,7 @@ function build_low {
          if [ "$SERVICENAME" = "install-support" ]; then
             drunner update 
          else
-            drunner status "$SERVICENAME"
+            drunner status "$SERVICENAME" >/dev/null 2>&1
             if [ $? -ne 0 ]; then
                drunner install "$BRANCHEDIMAGENAME" "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
                drunner status "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
