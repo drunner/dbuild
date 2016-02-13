@@ -18,9 +18,6 @@ set -o nounset
 MYDIR=$( dirname "$(readlink -f "$0")" )
 source "$MYDIR/variables.sh"
 source "$MYDIR/utils.sh"
-e=$(printf "\e") 
-readonly CODE_S="$e[32m"
-readonly CODE_E="$e[0m"
 
 #------------------------------------------------------------------------------------
 # showhelp - give some info about the service. SERVICENAME and IMAGENAME are provided by variables.sh.
@@ -43,7 +40,7 @@ SYNOPSIS
    ${SERVICENAME} configure     
    
 DESCRIPTION
-   A simple dRunner container from ${IMAGENAME}.
+   A simple dRunner container from ${IMAGENAME} (${INSTALLTIME})
    
 EOF
 }
@@ -68,7 +65,7 @@ function hasimagename {
 function isrepo {
    (
       cd "$1"
-      git rev-parse --abbrev-ref HEAD  >/dev/null
+      git rev-parse --abbrev-ref HEAD  >/dev/null 2>&1
    )
 }
 
@@ -77,10 +74,10 @@ function setBRANCHEDIMAGENAME {
    local P="${1:-""}"
    [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
    [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 0 ; }
-   BASEIMAGENAME=$(<"$P/imagename")
+   BASEIMAGENAME=$(cat $P/imagename | tr -d '\r\n ')
    BRANCHEDIMAGENAME="$BASEIMAGENAME"
 
-   [ -n "BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
+   [ -n "$BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
    
    if isrepo "$P" ; then
       local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -115,7 +112,24 @@ function build_low {
    setBRANCHEDIMAGENAME "$P" || return 1
    [ -n "$BASEIMAGENAME" ] || return 0
    (
+      [ -e "$P/Dockerfile" ] || { saybad "No Dockerfile, can't build." ; return 1 ; }
+      echo "Building ${BRANCHEDIMAGENAME}..."
       cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
+      if isrepo "$P" && isdev "$P" ; then
+         local SERVICENAME="${BASEIMAGENAME##*/}"
+         SERVICENAME="${SERVICENAME%%:*}"
+         
+         if [ "$SERVICENAME" = "install-support" ]; then
+            drunner update 
+         else
+            drunner status "$SERVICENAME"
+            if [ $? -ne 0 ]; then
+               drunner install "$BRANCHEDIMAGENAME" "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
+               drunner status "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
+            fi
+            drunner recover "$SERVICENAME" "$BRANCHEDIMAGENAME"
+         fi
+      fi
    )
 }
 
@@ -141,7 +155,7 @@ function title {
 }
 
 function runcmd {
-   [ -v DEVPATH ] || { "$1" "$PWD" ; return 0 ; }  
+   [ -v DEVPATH ] || { "$1" "$PWD" ; return $? ; }  
    (
    cd "$DEVPATH"
    for d in */ ; do 
@@ -207,7 +221,7 @@ function main {
             ;;
             
          #--- custom commands
-
+         
          build)
             runcmd build_low
             ;;
@@ -232,17 +246,22 @@ function main {
             
          clone)
             [ -v DEVPATH ] || die "Clone requires -a flag."
-            local PROJECTS=("drunner/install-support","drunner/install","drunner/samba","drunner/dtest","drunner/ddev","drunner/simplesecrets","drunner/minecraft","drunner/helloworld","drunner/baseimage-alpine")
+            local PROJECTS=("install-support" "install" "samba" "dtest" "ddev")
+            PROJECTS+=("simplesecrets" "minecraft" "helloworld")
             for PROJECT in "${PROJECTS[@]}"; do
-               if [ ! -e "$DEVPATH/$PROJECT]" ]; then
+               (
+               cd ${DEVPATH}
+               if [ ! -e "$PROJECT" ]; then
                   (
-                  cd ${DEVPATH}
-                  git clone "https://github.com/${PROJECT}.git" || die "Failed to clone $PROJECT"
+                  git clone "https://github.com/drunner/${PROJECT}.git" || die "Failed to clone $PROJECT"
+                  cd ${PROJECT}
                   git checkout dev
                   )
                   [ $? -eq 0 ] || die "Failed to set up $PROJECT."
                fi
+               )
             done      
+            ;;
                                     
          #--- unrecognised commands
 
