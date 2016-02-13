@@ -136,6 +136,7 @@ function build_low {
    )
 }
 
+
 function check_low {
    setBRANCHEDIMAGENAME "$1" || return 1
    [ -n "$BASEIMAGENAME" ] || return 0
