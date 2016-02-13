@@ -38,6 +38,7 @@ SYNOPSIS
    ${SERVICENAME} [-a] check
    ${SERVICENAME} [-a] test
    ${SERVICENAME} [-a] push [COMMITMSG]
+   ${SERVICENAME} -a clone
    
    ${SERVICENAME} configure     
    
@@ -54,8 +55,8 @@ function saygood { echo -e "] \e[32m${1}\e[0m" ; }
 function saybad { echo -e "] \e[31m\e[1m${1}\e[0m" ; }
 
 function dockerrun {
-   docker run -i --name="${SERVICENAME}-${COMMAND}" -h "${HOSTNAME}" "${DOCKEROPTS[@]}" "${IMAGENAME}" "$@"
-   local RVAL=$?
+   local RVAL=0
+   docker run -i --name="${SERVICENAME}-${COMMAND}" -h "${HOSTNAME}" "${DOCKEROPTS[@]}" "${IMAGENAME}" "$@" || RVAL=$?
    docker rm "${SERVICENAME}-${COMMAND}" >/dev/null
    if [ $RVAL -ne 0 ]; then die "${SERVICENAME} ${COMMAND} failed." ; fi
 }
@@ -105,33 +106,6 @@ function info_low {
    return 1 
 }
 
-#---------------------------------------------------------------------------------
-
-
-
-function push_low {
-   local P="$1"
-   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
-   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
-   (
-      cd "$P" ; git add . ; git commit -m "$COMMITMSG"; git push
-      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-      saygood "Pushed $P -> $BRANCH"
-      sayinfo  "Commit message: $COMMITMSG"
-   )
-}
-
-
-function copyup_low {
-   local P="$1"
-   isrepo "$P" || { saybad "$P - not a git repo" ; return 1 ; }
-   hasimagename "$P" || { sayinfo "$P - missing imagename" ; return 0 ; }
-   isdev "$P" || { saybad "$P - not dev branch" ; return 1 ; }
-   (
-      cd "$P" ; git pull ; git checkout master ; git merge dev ; git push ; git checkout dev   
-   )
-}
 
 #---------------------------------------------------------------------------------
 
@@ -237,11 +211,7 @@ function main {
          build)
             runcmd build_low
             ;;
-            
-         copyup)
-            runcmd copyup_low
-            ;;
-            
+                        
          info)
             runcmd info_low
             ;;
@@ -254,18 +224,26 @@ function main {
             runcmd test_low
             ;;   
             
-         push)
-            COMMITMSG="auto commit by j842/build"
-            [ $# -eq 0 ] || COMMITMSG="$1"
-            runcmd push_low
-            ;;
-            
          configure)
             dockerrun bash -c "echo $PWD > /config/path"
             DEVPATH=$(dockerrun cat /config/path) || die "Configure failed."
             echo "Path set to $DEVPATH"
             ;;
-                        
+            
+         clone)
+            [ -v DEVPATH ] || die "Clone requires -a flag."
+            local PROJECTS=("drunner/install-support","drunner/install","drunner/samba","drunner/dtest","drunner/ddev","drunner/simplesecrets","drunner/minecraft","drunner/helloworld","drunner/baseimage-alpine")
+            for PROJECT in "${PROJECTS[@]}"; do
+               if [ ! -e "$DEVPATH/$PROJECT]" ]; then
+                  (
+                  cd ${DEVPATH}
+                  git clone "https://github.com/${PROJECT}.git" || die "Failed to clone $PROJECT"
+                  git checkout dev
+                  )
+                  [ $? -eq 0 ] || die "Failed to set up $PROJECT."
+               fi
+            done      
+                                    
          #--- unrecognised commands
 
          *)
