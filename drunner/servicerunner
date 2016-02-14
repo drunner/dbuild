@@ -30,12 +30,9 @@ NAME
        
 SYNOPSIS
    ${SERVICENAME} [-a] build
-   ${SERVICENAME} [-a] copyup
    ${SERVICENAME} [-a] info
    ${SERVICENAME} [-a] check
    ${SERVICENAME} [-a] test
-   ${SERVICENAME} [-a] push [COMMITMSG]
-   ${SERVICENAME} -a clone
    
    ${SERVICENAME} configure     
    
