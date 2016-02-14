@@ -7,6 +7,5 @@ BUILDNAME="drunner/ddev"
 # Whether or not we're a dService:
 DSERVICE="yes"
 
-# Non-empty to install and update dev checkout as this dRunner Servicename.
+# Non-empty to install and update dev checkout when we build this (using the specified dRunner Service name).
 DEVSERVICENAME="ddev"
-
