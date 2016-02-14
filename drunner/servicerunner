@@ -58,33 +58,12 @@ function dockerrun {
    if [ $RVAL -ne 0 ]; then die "${SERVICENAME} ${COMMAND} failed." ; fi
 }
 
-function hasimagename {
-   [ -e "$1/imagename" ]
-}
-
 function isrepo {
    (
       cd "$1"
       git rev-parse --abbrev-ref HEAD  >/dev/null 2>&1
    )
 }
-
-function setBRANCHEDIMAGENAME {
-   BASEIMAGENAME=""
-   local P="${1:-""}"
-   [ -n "$P" ] || { saybad "setBRANCHEDIMAGENAME - missing parameter" ; return 1 ; }
-   [ -e "$P/imagename" ] || { sayinfo "$P - missing imagename" ; return 0 ; }
-   BASEIMAGENAME=$(cat $P/imagename | tr -d '\r\n ')
-   BRANCHEDIMAGENAME="$BASEIMAGENAME"
-
-   [ -n "$BASEIMAGENAME" ] || { saybad "$P - imagename empty" ; return 1 ; }
-   
-   if isrepo "$P" ; then
-      local BRANCH=$(cd "$P" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
-      [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BASEIMAGENAME}:${BRANCH}"
-   fi
-}
-
 
 function isdev {
    local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -93,14 +72,12 @@ function isdev {
 
 
 function info_low {
-   local P="$1"
-   local BRANCH=$(cd "$1" ; git rev-parse --abbrev-ref HEAD 2>/dev/null) || { saybad "$P - not a git repo" ; return 1 ; }
-   hasimagename "$P" ||         { sayinfo "$P - missing imagename" ; return 1 ; }
-   isdev "$P" &&                { saygood "$P - dev" ; return 0 ; }
-   [ "$BRANCH" = "master" ] &&  { sayinfo "$P - master" ; return 0 ; }
-   [ -n "$BRANCH" ] &&          { sayinfo "$P - $BRANCH" ; return 0 ; }       
-   sayinfo "$P - No repo"
-   return 1 
+   sayinfo "DSERVICE:       $DSERVICE"
+   sayinfo "BUILDNAME:      $BUILDNAME"
+   sayinfo "FULLNAME:       $BRANCHEDIMAGENAME"
+   sayinfo "DEVSERVICENAME: $DEVSERVICENAME"
+   sayinfo "DIRECTORY:      $1"
+   return 0
 }
 
 
@@ -108,46 +85,35 @@ function info_low {
 
 
 function build_low {
-   local P="$1"
-   setBRANCHEDIMAGENAME "$P" || return 1
-   [ -n "$BASEIMAGENAME" ] || return 0
-   (
-      [ -e "$P/Dockerfile" ] || { saybad "No Dockerfile, can't build." ; return 1 ; }
-      echo "Building ${BRANCHEDIMAGENAME}..."
-      cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
-      
-      if isrepo "$P" && isdev "$P" ; then
-         local SERVICENAME="${BASEIMAGENAME##*/}"
-         SERVICENAME="${SERVICENAME%%:*}"
-         
-         if [ "$SERVICENAME" = "install-support" ]; then
-            echo " "
-            drunner update && saygood "Drunner updated with install-support:dev just built."
-         else
-            echo " "
-            drunner status "$SERVICENAME" >/dev/null 2>&1
-            if [ $? -ne 0 ]; then
-               drunner install "$BRANCHEDIMAGENAME" "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
-               drunner status "$SERVICENAME" || { saybad "Couldn't install ${SERVICENAME}" ; return 1 ; }
-            fi
-            drunner recover "$SERVICENAME" "$BRANCHEDIMAGENAME" && saygood "drunner updated with $BRANCHEDIMAGENAME as service $SERVICENAME"
+   P="$1"
+   [ -e "$P/Dockerfile" ] || { saybad "No Dockerfile in $P, it's not a valid dService!" ; return 1 ; }
+   echo "Building ${BRANCHEDIMAGENAME}..."
+   cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
+
+   if [ -n "$DEVSERVICENAME" ] && isdev "$P" ; then      
+      if [ "$BASEIMAGENAME" = "drunner/install-support" ]; then
+         echo " "
+         drunner update && saygood "Drunner updated with install-support:dev just built."
+      else
+         echo " "
+         drunner status "$DEVSERVICENAME" >/dev/null 2>&1
+         if [ $? -ne 0 ]; then
+            drunner install "$BRANCHEDIMAGENAME" "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
+            drunner status "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
          fi
+         drunner recover "$DEVSERVICENAME" "$BRANCHEDIMAGENAME" && saygood "drunner updated with $BRANCHEDIMAGENAME as service $DEVSERVICENAME"
       fi
-   )
+   fi
 }
 
 
 function check_low {
-   setBRANCHEDIMAGENAME "$1" || return 1
-   [ -n "$BASEIMAGENAME" ] || return 0
-   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 1 ; }
+   [ "$DSERVICE" = "yes" ] || { sayinfo "$1 - skipping non-dService $BRANCHEDIMAGENAME." ; return 1 ; }
    drunner checkimage "$BRANCHEDIMAGENAME" && saygood "$BRANCHEDIMAGENAME is valid."
 }
 
 function test_low {
-   setBRANCHEDIMAGENAME "$1" || return 1
-   [ -n "$BASEIMAGENAME" ] || return 0
-   [ "$BASEIMAGENAME" != "drunner/support" ] || { sayinfo "$1 - skipping drunner/support" ; return 0 ; }
+   [ "$DSERVICE" = "yes" ] || { sayinfo "$1 - skipping non-dService $BRANCHEDIMAGENAME." ; return 0 ; }
    dtest test "$BRANCHEDIMAGENAME"
 }
 
@@ -158,19 +124,45 @@ function title {
    echo " ">&2
 }
 
+function run1cmd {
+   local THECMD="$1"
+   local THEDIR="$2"
+   [ -d "$THEDIR" ] || { saybad "Error - $THEDIR does not exist." ; return 1 ; }
+   [ -e "$THEDIR/ddev.sh" ] || { sayinfo "Not ddev compatible (missing $THEDIR/ddev.sh)" ; return 0 ; }
+   BUILDNAME=""
+   DSERVICE=""
+   DEVSERVICENAME="notset"
+   source "$THEDIR/ddev.sh"
+   [ -n "$BUILDNAME" ] || { saybad "$THEDIR/ddev.sh does not set BUILDNAME." ; return 1 ; }
+   [ -n "$DSERVICE" ] || { saybad "$THEDIR/ddev.sh does not set DSERVICE." ; return 1 ; }
+   [ "$DSERVICE" = "yes" ] || [ "$DSERVICE" = "no" ] || { saybad "DSERVICE must be yes or no in $THEDIR/ddev.sh." ; return 1 ; }
+   [ "$DEVSERVICENAME" != "notset" ] || { saybad "DEVSERVICENAME must be set to empty string or service name in $THEDIR/ddev.sh." ; return 1 ;}
+   
+   BASEIMAGENAME="$BUILDNAME"
+   BRANCHEDIMAGENAME="$BUILDNAME"   
+   if isrepo "$THEDIR" ; then
+      local BRANCH=$(cd "$THEDIR" ; git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      [ "$BRANCH" = "master" ] || BRANCHEDIMAGENAME="${BUILDNAME}:${BRANCH}"
+   fi  
+   info_low "$THEDIR"
+   [ "$THECMD" = "info_low" ] || "$THECMD" "$THEDIR"
+}
+
 function runcmd {
-   [ -v DEVPATH ] || { "$1" "$PWD" ; return $? ; }  
+   [ -v DEVPATH ] || { run1cmd "$1" "$PWD" ; return $? ; }  
    local TESTSOK=0
    local TOTALIMGS=0
    (
    cd "$DEVPATH"
    for d in */ ; do 
       title "Processing ${d%/}"
-      "$1" "${DEVPATH}/${d%/}" || ((++TESTSOK))
+      run1cmd "$1" "${DEVPATH}/${d%/}" || ((++TESTSOK))
       ((++TOTALIMGS))
    done
-   [ "$TESTSOK" -eq 0 ] || { saybad "Tests failed on $TESTSOK images out of $TOTALIMGS" ; exit 1 ; }
-   saygood "All $TOTALIMGS images passed testing."
+   echo " ">&2
+   echo " ">&2
+   [ "$TESTSOK" -eq 0 ] || { saybad "$1 only succeeded on (($TOTALIMGS-$TESTSOK)) / $TOTALIMGS images ( $TESTSOK failed )!" ; exit 1 ; }
+   saygood "$1 succeeded on $TOTALIMGS / $TOTALIMGS images."
    )   
 }
 
@@ -259,7 +251,7 @@ function main {
             PROJECTS+=("simplesecrets" "minecraft" "helloworld")
             for PROJECT in "${PROJECTS[@]}"; do
                (
-               cd ${DEVPATH}
+               cd "${DEVPATH}"
                if [ ! -e "$PROJECT" ]; then
                   (
                   git clone "https://github.com/drunner/${PROJECT}.git" || die "Failed to clone $PROJECT"
