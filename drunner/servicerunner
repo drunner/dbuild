@@ -87,19 +87,17 @@ function build_low {
    echo "Building ${BRANCHEDIMAGENAME}..."
    cd "$P" ; docker build -t "${BRANCHEDIMAGENAME}" . && saygood "Built ${BRANCHEDIMAGENAME}"
 
-   if [ -n "$DEVSERVICENAME" ] && isdev "$P" ; then      
-      if [ "$BASEIMAGENAME" = "drunner/install-support" ]; then
-         echo " "
-         drunner update && saygood "Drunner updated with install-support:dev just built."
-      else
-         echo " "
-         drunner status "$DEVSERVICENAME" >/dev/null 2>&1
-         if [ $? -ne 0 ]; then
-            drunner install "$BRANCHEDIMAGENAME" "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
-            drunner status "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
-         fi
-         drunner recover "$DEVSERVICENAME" "$BRANCHEDIMAGENAME" && saygood "drunner updated with $BRANCHEDIMAGENAME as service $DEVSERVICENAME"
+   if [ "$BASEIMAGENAME" = "drunner/install-support" ]; then
+      echo " "
+      drunner update && saygood "Drunner updated with install-support:dev just built."
+   elif [ -n "$DEVSERVICENAME" ] && isdev "$P" ; then      
+      echo " "
+      drunner status "$DEVSERVICENAME" >/dev/null 2>&1
+      if [ $? -ne 0 ]; then
+         drunner install "$BRANCHEDIMAGENAME" "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
+         drunner status "$DEVSERVICENAME" || { saybad "Couldn't install ${DEVSERVICENAME}" ; return 1 ; }
       fi
+      drunner recover "$DEVSERVICENAME" "$BRANCHEDIMAGENAME" && saygood "drunner updated with $BRANCHEDIMAGENAME as service $DEVSERVICENAME"
    fi
 }
 
